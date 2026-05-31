@@ -1,0 +1,583 @@
+# Agent 协作工作流指令协议
+# Agent Collaboration Workflow Instruction Protocol
+# Version: 1.0
+# Format: YAML
+
+---
+# ==================== 元信息 ====================
+metadata:
+  version: "1.0"
+  name: "Agent Collaboration Protocol"
+  description: "Structured instruction set for multi-agent workflow orchestration"
+  last_updated: "2025-05-31"
+  
+# ==================== 全局常量 ====================
+constants:
+  # 角色标识符
+  ROLES:
+    HERMES: "hermes"           # 编排者
+    CLAUDE_CODE: "claude_code" # 执行者
+    CODEX: "codex"             # 素材副手
+    SCRIPTS: "scripts"         # 工具链
+  
+  # 交付标准
+  DELIVERY:
+    IMAGE_SIZE: "1080x1440"
+    PAGE_COUNT_MIN: 9
+    PAGE_COUNT_MAX: 12
+    FILE_NAMING_PATTERN: "{NN:02d}.jpg"
+    OUTPUT_FORMATS: ["jpg", "pdf", "zip"]
+  
+  # 状态码
+  STATUS:
+    PENDING: "pending"
+    IN_PROGRESS: "in_progress"
+    COMPLETED: "completed"
+    FAILED: "failed"
+    DEGRADED: "degraded"
+
+# ==================== 核心原则 ====================
+principles:
+  - id: P1
+    name: "Position Over Capability"
+    statement: "差别不在能力，在位置。每个 Agent 必须清楚自己在工作流中的位置，做好该位置的事。"
+    rules:
+      - "不越位：不做不属于自己位置的事"
+      - "不沉默：遇到问题必须报告，不能假装成功"
+      - "不省略：交付物必须完整，不能只交付部分结果"
+      - "可追溯：每个决策和操作都要有记录"
+
+  - id: P2
+    name: "Explicit Handoff"
+    statement: "每个环节完成后，必须明确交接（输出物 + 状态报告），不能隐式传递"
+    
+  - id: P3
+    name: "Never Stop at Failure"
+    statement: "降级不是承认失败，而是确保用户最终能拿到产物"
+
+# ==================== 角色定义 ====================
+roles:
+  hermes:
+    name: "Hermes"
+    type: "orchestrator"
+    position: "user_input <-> execution_tools"
+    description: "常驻入口，把用户的一句话变成可执行任务的翻译器"
+    
+    responsibilities:
+      - "接收模糊需求并结构化"
+      - "拆分任务并分配给合适的执行者"
+      - "编排执行顺序"
+      - "收尾与回执"
+      - "降级决策"
+    
+    forbidden:
+      - "抢着写内容（这是执行者的事）"
+      - "自行执行具体任务"
+      - "省略校验步骤"
+      - "只回'已完成'"
+    
+    workflow:
+      step_1_receive:
+        name: "接收需求"
+        input: "用户的一句话（模糊）"
+        actions:
+          - "识别需求类型: [content_creation, code_modification, data_processing, other]"
+          - "识别交付格式: [document, image, code, data, mixed]"
+          - "识别隐含约束: {time, platform, audience}"
+        output: "需求摘要（内部）"
+      
+      step_2_structure:
+        name: "结构化 Prompt"
+        required_fields:
+          - field: "audience"
+            description: "谁会看这个产物"
+          - field: "format_layout"
+            description: "产物长什么样？尺寸？页数？"
+          - field: "title_direction"
+            description: "什么角度？什么立场？"
+          - field: "tone_style"
+            description: "第一人称？正式？口语？"
+          - field: "forbidden_items"
+            description: "哪些词/表达/风格不能出现"
+          - field: "delivery_format"
+            description: "最终产物是什么格式？如何交付？"
+        output: "结构化 prompt 对象"
+      
+      step_3_orchestrate:
+        name: "拆分与编排"
+        principles:
+          - "每个子任务有明确的输入和输出"
+          - "子任务之间的依赖关系清晰"
+          - "每个子任务分配给最适合的执行者"
+        output: "任务编排图"
+      
+      step_4_deliver:
+        name: "收尾与回执"
+        required_receipt_fields:
+          - "产物列表: {files: [{name, count, format}]}"
+          - "校验结果: {dimensions, margins, page_count, naming, format}"
+          - "交付方式: [direct, link]"
+          - "异常或警告"
+          - "过期时间（如适用）"
+          - "降级信息（如适用）"
+        forbidden_responses:
+          - "只回'已完成'"
+          - "省略校验步骤"
+          - "隐藏失败信息"
+
+  claude_code:
+    name: "Claude Code"
+    type: "executor"
+    position: "project_repository"
+    description: "具体的执行者，擅长进项目目录，改代码、跑测试、读报错、修文件"
+    
+    responsibilities:
+      - "执行具体任务"
+      - "控制质量"
+      - "报告异常"
+    
+    forbidden:
+      - "试图编排全局"
+      - "自行降级"
+      - "扩展任务范围"
+    
+    workflow:
+      step_1_understand:
+        name: "理解任务"
+        actions:
+          - "逐条确认 prompt 中的所有约束"
+          - "识别硬性约束 vs 软性约束"
+          - "如有模糊，向 Hermes 确认"
+      
+      step_2_execute:
+        name: "执行"
+        rules:
+          - "严格按照 prompt 的格式要求输出"
+          - "遵守所有'禁止事项'——这是红线"
+          - "保持口吻一致"
+          - "发现 prompt 矛盾时暂停并报告"
+      
+      step_3_self_check:
+        name: "自检"
+        checklist:
+          - "是否满足了所有硬性约束？"
+          - "是否触犯了任何禁止事项？"
+          - "输出格式是否符合要求？"
+          - "有没有遗漏的内容？"
+
+  codex:
+    name: "Codex"
+    type: "material_assistant"
+    position: "on_demand"
+    description: "素材和片段的生产者，按需出场"
+    
+    responsibilities:
+      - "生产素材（SVG、TikZ、HTML 片段）"
+      - "跑脚本"
+      - "交付可直接使用的素材"
+    
+    forbidden:
+      - "试图主导流程"
+      - "扩展任务范围"
+    
+    workflow:
+      on_receive:
+        actions:
+          - "确认素材的格式要求和尺寸要求"
+          - "生产素材，确保可直接嵌入"
+          - "如无法满足要求，立即报告"
+          - "只做被要求的事"
+
+  scripts:
+    name: "Scripts"
+    type: "infrastructure"
+    position: "pipeline_end"
+    description: "导出、校验、打包的工具，不做创作决策"
+    
+    responsibilities:
+      - "格式转换"
+      - "尺寸校验"
+      - "顺序校验"
+      - "打包"
+      - "体积检查"
+    
+    verification_checklist:
+      - "尺寸：每页是否符合要求的尺寸？"
+      - "安全边距：标题/文字是否在安全区域内？"
+      - "页数：总页数是否正确？有无漏页/重页？"
+      - "命名：文件名是否有序？"
+      - "格式：导出格式是否正确？"
+      - "体积：是否超出交付渠道限制？"
+      - "完整性：所有必需的文件是否都包含？"
+
+# ==================== 任务类型定义 ====================
+task_types:
+  content_creation:
+    name: "内容创作"
+    default_executor: "claude_code"
+    required_prompt_fields:
+      - "audience"
+      - "format_layout"
+      - "tone_style"
+      - "forbidden_items"
+    
+  code_modification:
+    name: "代码修改"
+    default_executor: "claude_code"
+    required_prompt_fields:
+      - "target_files"
+      - "expected_behavior"
+      - "test_requirements"
+    
+  data_processing:
+    name: "数据处理"
+    default_executor: "scripts"
+    required_prompt_fields:
+      - "input_format"
+      - "output_format"
+      - "transformation_rules"
+
+# ==================== 工作流模板 ====================
+workflow_templates:
+  long_image_article:
+    name: "长图文创作"
+    description: "从小红书长文需求到分页图片交付的完整流程"
+    
+    stages:
+      - stage: 1
+        name: "需求接收与结构化"
+        role: "hermes"
+        input: "用户的一句话"
+        output: "结构化 prompt"
+      
+      - stage: 2
+        name: "任务拆分与编排"
+        role: "hermes"
+        input: "结构化 prompt"
+        output: "任务编排图"
+        subtasks:
+          - id: "draft_content"
+            name: "起草无图正文"
+            executor: "claude_code"
+          - id: "user_confirm"
+            name: "用户确认正文"
+            executor: "user"
+            checkpoint: true
+          - id: "add_materials"
+            name: "补素材"
+            executor: "codex"
+            condition: "需要 SVG/图表时"
+          - id: "layout_pages"
+            name: "排版分页"
+            executor: "claude_code"
+          - id: "export_package"
+            name: "导出校验打包"
+            executor: "scripts"
+          - id: "deliver"
+            name: "交付回执"
+            executor: "hermes"
+      
+      - stage: 3
+        name: "执行与素材生产"
+        role: "claude_code / codex"
+        parallel: false
+      
+      - stage: 4
+        name: "组装、校验与打包"
+        role: "scripts + hermes"
+        verification_required: true
+      
+      - stage: 5
+        name: "交付与回执"
+        role: "hermes"
+        receipt_required: true
+
+# ==================== 交付标准 ====================
+delivery_standards:
+  quality:
+    dimensions:
+      target: "1080x1440"
+      tolerance: "±2%"
+    safe_margins:
+      top: "100px"
+      bottom: "100px"
+      left: "80px"
+      right: "80px"
+    page_count:
+      min: 9
+      max: 12
+    naming:
+      pattern: "{NN:02d}.jpg"
+      start_from: 1
+    formats: ["jpg", "pdf", "zip"]
+  
+  content:
+    tone_consistency: "required"
+    forbidden_check: "required"
+    format_compliance: "required"
+
+# ==================== 降级策略 ====================
+degradation_policies:
+  policy_1:
+    trigger: "file_size_exceeds_limit"
+    original: "直接发送 ZIP"
+    fallback: "上传至云端，发送下载链接"
+    decision_maker: "hermes"
+    receipt_requirement: "必须注明降级原因和新方案"
+  
+  policy_2:
+    trigger: "format_not_supported"
+    original: "原格式交付"
+    fallback: "转换为兼容格式"
+    decision_maker: "hermes"
+  
+  policy_3:
+    trigger: "material_generation_failed"
+    original: "Codex 生成 SVG"
+    fallback: "用纯文本/简单图形替代"
+    decision_maker: "hermes"
+  
+  policy_4:
+    trigger: "verification_failed"
+    original: "直接交付"
+    fallback: "修复后重新校验"
+    decision_maker: "hermes"
+  
+  policy_5:
+    trigger: "link_expired"
+    original: "下载链接"
+    fallback: "重新上传并告知新链接"
+    decision_maker: "hermes"
+
+# ==================== 消息格式 ====================
+message_formats:
+  # Hermes 发送给执行者的任务消息
+  task_assignment:
+    from: "hermes"
+    to: "{executor_role}"
+    fields:
+      task_id: "string"
+      task_type: "string"
+      prompt: "structured_prompt_object"
+      dependencies: "[task_id]"
+      deadline: "datetime (optional)"
+      priority: "[high, normal, low]"
+  
+  # 执行者返回的完成消息
+  task_completion:
+    from: "{executor_role}"
+    to: "hermes"
+    fields:
+      task_id: "string"
+      status: "[completed, failed, blocked]"
+      outputs: "[file_path]"
+      verification_result: "object"
+      issues: "[string] (if any)"
+  
+  # Hermes 给用户的回执
+  delivery_receipt:
+    from: "hermes"
+    to: "user"
+    fields:
+      delivery_id: "string"
+      products:
+        files: "[{name, count, format, size}]"
+        locations: "[path/url]"
+      verification:
+        dimensions: "pass/fail"
+        margins: "pass/fail"
+        page_count: "pass/fail"
+        naming: "pass/fail"
+        format: "pass/fail"
+      delivery_method: "[direct, link]"
+      expiration: "datetime (if link)"
+      warnings: "[string]"
+      degradation:
+        applied: "boolean"
+        original_plan: "string"
+        reason: "string"
+        new_plan: "string"
+        limitations: "string"
+
+# ==================== 状态机 ====================
+state_machine:
+  states:
+    - IDLE
+    - RECEIVING
+    - STRUCTURING
+    - ORCHESTRATING
+    - EXECUTING
+    - VERIFYING
+    - PACKAGING
+    - DELIVERING
+    - COMPLETED
+    - DEGRADED
+    - FAILED
+  
+  transitions:
+    - { from: IDLE, to: RECEIVING, trigger: "user_input" }
+    - { from: RECEIVING, to: STRUCTURING, trigger: "demand_recognized" }
+    - { from: STRUCTURING, to: ORCHESTRATING, trigger: "prompt_ready" }
+    - { from: ORCHESTRATING, to: EXECUTING, trigger: "tasks_assigned" }
+    - { from: EXECUTING, to: VERIFYING, trigger: "execution_done" }
+    - { from: VERIFYING, to: PACKAGING, trigger: "verification_passed" }
+    - { from: VERIFYING, to: EXECUTING, trigger: "verification_failed" }
+    - { from: PACKAGING, to: DELIVERING, trigger: "package_ready" }
+    - { from: DELIVERING, to: COMPLETED, trigger: "delivery_success" }
+    - { from: DELIVERING, to: DEGRADED, trigger: "delivery_failed_but_fallback_succeeded" }
+    - { from: DELIVERING, to: FAILED, trigger: "fallback_also_failed" }
+
+# ==================== 检查清单模板 ====================
+checklists:
+  hermes:
+    - "需求是否已结构化（受众/格式/口吻/禁止事项/交付格式）？"
+    - "任务是否已拆分（每个子任务有明确输入/输出）？"
+    - "执行者是否已正确分配？"
+    - "执行顺序是否已确定（依赖关系清晰）？"
+    - "用户确认节点是否已插入？"
+    - "校验是否已逐项执行？"
+    - "回执是否包含完整信息（产物/校验/交付方式/异常）？"
+    - "降级方案是否已准备（如需要）？"
+  
+  claude_code:
+    - "prompt 中的所有约束是否已逐条确认？"
+    - "硬性约束是否全部满足？"
+    - "禁止事项是否全部避免？"
+    - "口吻/风格是否一致？"
+    - "输出格式是否符合要求？"
+    - "有无遗漏内容？"
+    - "有无需要报告的异常？"
+  
+  scripts:
+    - "尺寸是否正确？"
+    - "安全边距是否足够？"
+    - "页数是否正确（不漏不重）？"
+    - "文件命名是否有序？"
+    - "导出格式是否正确？"
+    - "文件体积是否合理？"
+    - "ZIP 打包是否完整？"
+
+# ==================== 错误代码 ====================
+error_codes:
+  E001:
+    code: "PROMPT_INCOMPLETE"
+    description: "Prompt 缺少必需字段"
+    severity: "error"
+    handler: "hermes"
+  
+  E002:
+    code: "CONSTRAINT_VIOLATION"
+    description: "触犯了禁止事项"
+    severity: "error"
+    handler: "claude_code"
+  
+  E003:
+    code: "VERIFICATION_FAILED"
+    description: "校验未通过"
+    severity: "warning"
+    handler: "hermes"
+  
+  E004:
+    code: "DELIVERY_FAILED"
+    description: "交付失败"
+    severity: "warning"
+    handler: "hermes"
+  
+  E005:
+    code: "FALLBACK_FAILED"
+    description: "降级方案也失败"
+    severity: "error"
+    handler: "hermes"
+  
+  E006:
+    code: "TASK_DEPENDENCY_BLOCKED"
+    description: "依赖任务未完成"
+    severity: "info"
+    handler: "hermes"
+
+# ==================== 示例 ====================
+examples:
+  example_1:
+    name: "小红书长文创作"
+    user_input: "帮我做一篇小红书长文"
+    
+    structured_prompt:
+      audience: "小红书读者（认真用 agent、关心落地的人）"
+      format_layout: 
+        type: "long_image"
+        pages: "9-12"
+        dimensions: "1080x1440"
+        safe_margins: true
+      title_direction: "别把 X 当 Y 用（反直觉、有立场、不写成评测）"
+      tone_style: "真实使用心得（第一人称、不官方、不堆形容词）"
+      forbidden_items: ["全能", "神器", "skills 卖点", "产品官网风格"]
+      delivery_format: 
+        formats: ["html", "jpg_pages", "zip"]
+        naming: "01.jpg .. 11.jpg"
+    
+    task_orchestration:
+      - task_id: "T1"
+        name: "起草正文"
+        executor: "claude_code"
+        dependencies: []
+      
+      - task_id: "T2"
+        name: "用户确认"
+        executor: "user"
+        dependencies: ["T1"]
+        checkpoint: true
+      
+      - task_id: "T3"
+        name: "补素材"
+        executor: "codex"
+        dependencies: ["T2"]
+        condition: "需要图表"
+      
+      - task_id: "T4"
+        name: "排版分页"
+        executor: "claude_code"
+        dependencies: ["T2", "T3"]
+      
+      - task_id: "T5"
+        name: "导出打包"
+        executor: "scripts"
+        dependencies: ["T4"]
+      
+      - task_id: "T6"
+        name: "交付"
+        executor: "hermes"
+        dependencies: ["T5"]
+    
+    delivery_receipt:
+      products:
+        - type: "jpg_pages"
+          files: ["01.jpg", "02.jpg", ..., "11.jpg"]
+          dimensions: "1080x1440"
+        - type: "pdf"
+          file: "article.pdf"
+          pages: 11
+        - type: "zip"
+          file: "article.zip"
+          size: "18.4MB"
+      verification:
+        dimensions: "pass"
+        margins: "pass"
+        page_count: "pass"
+        naming: "pass"
+        format: "pass"
+      delivery_method: "link"
+      expiration: "2025-06-07T15:30:00Z"
+      degradation:
+        applied: true
+        original_plan: "直接发送 ZIP"
+        reason: "ZIP 超出用户的输入文件上限"
+        new_plan: "上传至云端，发送下载链接"
+        limitations: "链接 7 天有效"
+
+---
+# 使用说明：
+# 1. 本文件采用 YAML 格式，可被人类阅读和机器解析
+# 2. Agent 应根据其 role 字段读取对应的配置
+# 3. 所有任务必须遵循 state_machine 中定义的状态流转
+# 4. 消息传递必须符合 message_formats 中定义的格式
+# 5. 错误处理应参考 error_codes 中的定义
